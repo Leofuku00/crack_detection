@@ -1,10 +1,15 @@
 """Refine a frozen patch-level crack prior using native-pixel luminance detail."""
 
+import logging
+
 import torch
 from torch import nn
 from torch.nn import functional as F
 
 from .dinov3_common import FrozenDINO
+
+
+logger = logging.getLogger(__name__)
 
 
 class SimpleDecoder(nn.Module):
@@ -49,7 +54,8 @@ class DetailHead(nn.Module):
 class DINOv3DetailDecoder(FrozenDINO):
     def __init__(self, *, coarse_checkpoint=None, detail_channels=16, crop_size=128,
                  positive_crop_fraction=0.5, positive_weight=10.0, ridge_recovery=None,
-                 trained_detail_checkpoint=None, threshold=0.5, hidden_dim=64, epochs=30,
+                 trained_detail_checkpoint=None, initial_detail_checkpoint=None,
+                 threshold=0.5, hidden_dim=64, epochs=30,
                  batch_size=2, lr=0.001, **kwargs):
         super().__init__(threshold=threshold, **kwargs)
         self.epochs = epochs
@@ -61,6 +67,9 @@ class DINOv3DetailDecoder(FrozenDINO):
         self.positive_weight = positive_weight
         self.ridge_recovery = ridge_recovery
         self.trained_detail_checkpoint = trained_detail_checkpoint
+        self.initial_detail_checkpoint = initial_detail_checkpoint
+        if initial_detail_checkpoint and (trained_detail_checkpoint or coarse_checkpoint):
+            raise ValueError("Initial detail weights already supply both decoder stages.")
         with torch.random.fork_rng(devices=[]):
             torch.random.default_generator.manual_seed(self.random_seed)
             coarse = SimpleDecoder(self.backbone.embed_dim, hidden_dim)
@@ -88,6 +97,9 @@ class DINOv3DetailDecoder(FrozenDINO):
             self.training_mask_counts = {"reused_decoder": self.trained_detail_checkpoint}
             self.decoder.eval()
             return self
+        if self.initial_detail_checkpoint:
+            state = torch.load(self.initial_detail_checkpoint, map_location="cpu", weights_only=True)
+            self.decoder.load_state_dict(state["decoder"])
         if self.coarse_checkpoint:
             state = torch.load(self.coarse_checkpoint, map_location="cpu", weights_only=True)
             self.decoder.coarse.load_state_dict(state["decoder"])
@@ -103,11 +115,14 @@ class DINOv3DetailDecoder(FrozenDINO):
                 samples.append((pair, target, coordinates))
         self.training_mask_counts = {"positive_pixels": positives, "negative_pixels": negatives,
                                      "pos_weight": self.positive_weight}
+        if self.initial_detail_checkpoint:
+            self.training_mask_counts["initial_detail_checkpoint"] = self.initial_detail_checkpoint
+        logger.info("Cached %d training samples. Starting %d epochs.", len(samples), self.epochs)
         rng = torch.Generator().manual_seed(self.random_seed)
         optimizer = torch.optim.AdamW(self.decoder.detail.parameters(), lr=self.lr)
         weight = torch.tensor(self.positive_weight, device=self.device)
         self.decoder.train()
-        for _ in range(self.epochs):
+        for epoch in range(1, self.epochs + 1):
             for indices in torch.randperm(len(samples), generator=rng).split(self.batch_size):
                 crops, labels = [], []
                 for index in indices:
@@ -134,6 +149,9 @@ class DINOv3DetailDecoder(FrozenDINO):
                 optimizer.zero_grad(set_to_none=True)
                 loss.backward()
                 optimizer.step()
+            if epoch == 1 or epoch % 10 == 0 or epoch == self.epochs:
+                logger.info("Completed epoch %d/%d", epoch, self.epochs)
+        self.training_mask_counts["epochs_trained"] = self.epochs
         self.decoder.eval()
         return self
 

@@ -57,16 +57,31 @@ def single_threaded_torch():
     torch.set_num_threads(previous)
 
 
-def test_detail_decoder_fit_and_predict(monkeypatch):
+@pytest.mark.parametrize("warm_start", [False, True])
+def test_detail_decoder_fit_and_predict(monkeypatch, tmp_path, warm_start):
     config = yaml.safe_load((CONFIGS_DIR / "dinov3_detail_decoder.yaml").read_text())
     assert list(MODEL_REGISTRY) == [config["model_name"]]
     params = dict(config["params"], epochs=1, trained_detail_checkpoint=None, device="cpu", backbone=MockBackbone())
     monkeypatch.setattr(torch.optim, "AdamW", MockOptimizer)
-    model = MODEL_REGISTRY[config["model_name"]](**params)
+    model_class = MODEL_REGISTRY[config["model_name"]]
+    if warm_start:
+        initial = model_class(**params)
+        with torch.no_grad():
+            initial.decoder.coarse.layers[0].bias.fill_(0.25)
+        checkpoint = tmp_path / "initial.pt"
+        torch.save({"decoder": initial.decoder.state_dict()}, checkpoint)
+        params["initial_detail_checkpoint"] = checkpoint
+    model = model_class(**params)
     x = torch.zeros(2, 3, 32, 48)
     target = torch.zeros(2, 32, 48)
     target[:, 12, 10] = 1
     model.fit(x, target)
+    assert model.training_mask_counts["epochs_trained"] == 1
+    if warm_start:
+        torch.testing.assert_close(
+            model.decoder.coarse.layers[0].bias, initial.decoder.coarse.layers[0].bias
+        )
+        assert not torch.equal(model.decoder.detail[-1].bias, initial.decoder.detail[-1].bias)
     predicted = model.predict(x)
     assert predicted.shape == target.shape
     assert set(predicted.unique().tolist()) <= {0, 1}

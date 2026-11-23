@@ -13,3 +13,4 @@ model.env
 *.ckpt
 *.safetensors
 !/weights/detail.pt
+!/weights/detail-200ep.pt

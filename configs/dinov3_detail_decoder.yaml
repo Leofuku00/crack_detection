@@ -16,7 +16,7 @@ params:
   crop_size: 128
   positive_crop_fraction: 0.5
   positive_weight: 10.0
-  trained_detail_checkpoint: weights/detail.pt
+  trained_detail_checkpoint: weights/detail-200ep.pt
   ridge_recovery:
     radii:
     - 2
