@@ -11,7 +11,6 @@ from scipy.ndimage import label
 from .inspection_edges import suppress_step_edges
 from .inspection_fixtures import fixture_masks
 from .inspection_region import inspection_regions, normalize_rgb
-from .inspection_surface import wall_surface_mask
 from .segmentation_experiment import save_comparison, segmentation_metrics, tiled_scores
 
 
@@ -34,18 +33,11 @@ def read_region(path, size):
     return torch.from_numpy(pixels != 0)
 
 
-def inspection_prediction(scores, region, threshold, config, original, fixture=None):
+def inspection_prediction(scores, region, threshold, config, original):
     prediction = masked_cracks(scores, region, threshold, config.get("inspection_min_component_pixels", 0))
     if "edge_filter" in config:
         prediction = suppress_step_edges(prediction, original, config["edge_filter"])
-    return prediction if fixture is None else prediction & ~fixture
-
-
-def inspection_input_region(original, region, config, fixture):
-    if "wall_surface" not in config:
-        return region
-    surface = wall_surface_mask(original, region, config["wall_surface"])
-    return surface if fixture is None else surface & ~fixture
+    return prediction
 
 
 def predict_frames(model, originals, names, config, output, targets=None, regions=None):
@@ -62,10 +54,11 @@ def predict_frames(model, originals, names, config, output, targets=None, region
         (output / "unmasked_crack_masks").mkdir(exist_ok=True)
     records = []
     for index, (original, name, region, fixture) in enumerate(zip(originals, names, regions, fixtures, strict=True)):
-        region = inspection_input_region(original, region, config, fixture)
+        if fixture is not None:
+            region = region & ~fixture
         image = normalize_rgb(original)
         scores = tiled_scores(model, image, region.byte(), config["tile_size"], config["tile_batch_size"])
-        prediction = inspection_prediction(scores, region, model.threshold, config, original, fixture)
+        prediction = inspection_prediction(scores, region, model.threshold, config, original)
         for prefix, mask, color in (("region", region, "lime"), ("crack", prediction, "red")):
             binary = Image.fromarray(mask.byte().numpy() * 255)
             binary.save(output / f"{prefix}_masks" / f"{name}.png")

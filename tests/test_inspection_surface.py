@@ -1,33 +1,56 @@
+from pathlib import Path
+
+import pytest
 import torch
+import yaml
 from PIL import Image, ImageDraw
 
-from src.inspection_cracks import inspection_input_region, read_region
+from src import inspection_cracks
+from src.inspection_cracks import read_region
 
 
-def test_wall_color_uses_surrounding_surface_and_excludes_foreign_objects():
-    image = Image.new("RGB", (180, 128), "#c2ad80")
+@pytest.mark.parametrize("use_saved_region", [False, True])
+def test_multicolor_walls_survive_region_selection(tmp_path, monkeypatch, use_saved_region):
+    image = Image.new("RGB", (96, 64), "#ddd1b7")
     draw = ImageDraw.Draw(image)
-    draw.rectangle((35, 25, 39, 100), fill="#1e1525")
-    draw.rectangle((95, 17, 155, 108), fill="#7a8a9c")
-    draw.rectangle((5, 48, 20, 80), fill="#bca77e")
-    building = torch.ones((128, 180), dtype=torch.bool)
-    building[:, :5] = False
+    for start, color in ((24, "#a92426"), (48, "#914725"), (72, "#284b6f")):
+        draw.rectangle((start, 0, start + 23, 63), fill=color)
+    draw.line((0, 32, 95, 32), fill="#25120f", width=2)
+
+    building = torch.ones((64, 96), dtype=torch.bool)
+    building[:8] = False
     fixture = torch.zeros_like(building)
-    fixture[48:81, 5:21] = True
-    config = {"wall_surface": {
-        "long_edge": 960, "chroma_radius": 16, "lightness_margin": 28, "bridge_radius_px": 10,
-    }}
+    fixture[28:36, 52:56] = True
+    expected = building & ~fixture
+    config_path = Path(__file__).resolve().parents[1] / "configs" / "dinov3_detail_decoder.yaml"
+    config = yaml.safe_load(config_path.read_text())
+    monkeypatch.setattr(inspection_cracks, "fixture_masks", lambda *args: [fixture])
+    monkeypatch.setattr(inspection_cracks, "inspection_regions", lambda *args: [building])
 
-    region = inspection_input_region(image, building, config, fixture)
+    class Model:
+        threshold = 0.5
+        device = "cpu"
+        backbone = torch.nn.Identity()
+        decoder = torch.nn.Identity()
 
-    assert region[30:95, 35:40].all()
-    assert not region[28:95, 105:145].any()
-    assert not region[48:81, 5:21].any()
-    assert not region[:, :5].any()
-    assert region[30:95, 45:85].all()
+        def score_map(self, tiles):
+            scores = torch.zeros_like(tiles[:, 0])
+            scores[:, 32:34, :96] = 1.0
+            return scores
+
+    inspection_cracks.predict_frames(
+        Model(), [image], ["wall"], config, tmp_path,
+        regions=[building] if use_saved_region else None,
+    )
+
+    assert torch.equal(read_region(tmp_path / "region_masks/wall.png", image.size), expected)
+    cracks = read_region(tmp_path / "crack_masks/wall.png", image.size)
+    assert not (cracks & ~expected).any()
+    for columns in (slice(8, 16), slice(32, 40), slice(60, 68), slice(80, 88)):
+        assert cracks[32:34, columns].all()
 
 
-def test_saved_video_mask_can_be_loaded_as_an_input_mask(tmp_path):
+def test_saved_building_mask_can_be_loaded_as_an_input_mask(tmp_path):
     region = torch.tensor([[False, True], [True, False]])
     path = tmp_path / "region.png"
     Image.fromarray(region.numpy()).save(path)

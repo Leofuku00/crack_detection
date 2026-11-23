@@ -8,7 +8,7 @@ tile_size: 512
 tile_batch_size: 8
 ccss_train_dir: data/ccss/CCSS-DATA-V4-withVal/benchmarkingDatasets/train/noAugmentation-noPatch
 params:
-  epochs: 24
+  epochs: 200
   batch_size: 8
   lr: 0.001
   threshold: 0.5
@@ -37,7 +37,8 @@ inspection:
   depth_revision: 5426e4f0f36572d16453bbda7a8389317b1bef99
   sam_model: facebook/sam2.1-hiera-tiny
   sam_revision: de431c4043854a71d8101e17995dfe596bf101a5
-  prompt: exterior wall, stucco wall, painted concrete column, concrete ceiling, soffit,
+  prompt: exterior wall, stucco wall, brick wall, masonry wall, painted metal siding,
+    weathered wall, painted concrete column, concrete ceiling, soffit,
     chipped concrete, cracked plaster, exposed concrete, stained concrete, plumbing
     pipe, metal pipe, drainpipe, pipe elbow, pipe coupling
   background_prompt:
@@ -70,6 +71,9 @@ inspection:
     surfaces:
       labels:
       - concrete wall
+      - brick wall
+      - masonry wall
+      - metal siding
       - concrete ceiling
       - column
       - concrete beam
@@ -94,7 +98,8 @@ inspection:
       - floor
       - car
       - tree
-      threshold: 0.45
+      # Require stronger evidence before cutting out a region of the wall.
+      threshold: 0.50
       exact_label: true
     vents:
       labels:
@@ -159,8 +164,3 @@ fixture_filter:
       threshold: 0.18
       max_box_area: 0.08
       max_box_fill: 0.35
-wall_surface:
-  long_edge: 960
-  chroma_radius: 16
-  lightness_margin: 28
-  bridge_radius_px: 24

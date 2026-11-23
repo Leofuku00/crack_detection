@@ -1,6 +1,6 @@
 # Painted-wall crack detection
 
-The pipeline identifies an eligible painted-wall region, uses a DINOv3 detail decoder to score cracks in the original RGB image at native resolution, then filters detections near fixtures and surface edges. The trained detail decoder and its coarse crack prior are included in `weights/detail.pt`.
+The pipeline identifies an eligible painted-wall region, uses a DINOv3 detail decoder to score cracks in the original RGB image at native resolution, then filters detections near fixtures and surface edges. The region is selected using surface recognition and depth without filtering by a dominant wall color. Brick, masonry, and metal siding are included in the surface prompts. The trained detail decoder and its coarse crack prior are included in `weights/detail.pt`.
 
 ## Reproduce inference
 
@@ -30,4 +30,4 @@ uv run --locked pytest
 uv run --env-file model.env python scripts/run_experiment.py
 ```
 
-The experiment runner reuses the included decoder by default. To repeat the original wall-image evaluation, also supply the wall images and labels, reference building masks, and hard-negative pairs at the paths in the YAML. Those project-specific inputs are separate from CCSS.
+The experiment runner reuses the included decoder by default. Training runs configured without a saved detail checkpoint use the configured 200 epochs. This setting does not change the included checkpoint. To evaluate on the original wall-image split, also supply the wall images and labels, reference building masks, and hard-negative pairs at the paths in the YAML. Those project-specific inputs are separate from CCSS.
