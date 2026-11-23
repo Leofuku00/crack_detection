@@ -1,0 +1,166 @@
+model_name: dinov3_detail_decoder
+random_seed: 42
+test_size: 3
+image_size: null
+images_dir: data/raw/new_screenshots
+masks_dir: data/processed/masks
+tile_size: 512
+tile_batch_size: 8
+ccss_train_dir: data/ccss/CCSS-DATA-V4-withVal/benchmarkingDatasets/train/noAugmentation-noPatch
+params:
+  epochs: 24
+  batch_size: 8
+  lr: 0.001
+  threshold: 0.5
+  detail_channels: 16
+  crop_size: 128
+  positive_crop_fraction: 0.5
+  positive_weight: 10.0
+  trained_detail_checkpoint: weights/detail.pt
+  ridge_recovery:
+    radii:
+    - 2
+    - 4
+    - 8
+    - 16
+    min_contrast: 0.026
+    relative_contrast: 0.45
+    context_radius: 10
+    min_prior_logit: -1
+    coherent_flanks: true
+    seam:
+      sample_spacing: 48
+      min_contrast: 0.18
+inspection:
+  long_edge: 1024
+  depth_model: depth-anything/Depth-Anything-V2-Small-hf
+  depth_revision: 5426e4f0f36572d16453bbda7a8389317b1bef99
+  sam_model: facebook/sam2.1-hiera-tiny
+  sam_revision: de431c4043854a71d8101e17995dfe596bf101a5
+  prompt: exterior wall, stucco wall, painted concrete column, concrete ceiling, soffit,
+    chipped concrete, cracked plaster, exposed concrete, stained concrete, plumbing
+    pipe, metal pipe, drainpipe, pipe elbow, pipe coupling
+  background_prompt:
+  - door
+  - window
+  - surveillance camera
+  - circular wall vent
+  - ventilation grille
+  - electrical box
+  - loose wire
+  - cable
+  - car
+  - tree
+  - shrub
+  - sky
+  - road
+  - ground
+  - fence
+  - house across the street
+  - utility pole
+  detector_model: IDEA-Research/grounding-dino-tiny
+  detector_revision: a2bb814dd30d776dcf7e30523b00659f4f141c71
+  depth_ratio: 0.28
+  depth_quantile: 0.65
+  depth_continuity: 0.06
+  surface_support: 0.2
+  pipe_conflict_margin: 0.1
+  wire_max_box_fill: 0.35
+  detection_prompts:
+    surfaces:
+      labels:
+      - concrete wall
+      - concrete ceiling
+      - column
+      - concrete beam
+      - soffit
+      threshold: 0.28
+    pipes:
+      labels:
+      - plumbing pipe
+      - gray pipe
+      - horizontal pipe
+      - vertical drainpipe
+      - pipe elbow
+      - pipe coupling
+      threshold: 0.24
+      text_threshold: 0.22
+    exclusions:
+      labels:
+      - door
+      - window
+      - security camera
+      - electrical cabinet
+      - floor
+      - car
+      - tree
+      threshold: 0.45
+      exact_label: true
+    vents:
+      labels:
+      - round wall vent
+      - ventilation grille
+      - vent cover
+      threshold: 0.45
+      exact_label: true
+    wires:
+      labels:
+      - electric wire
+      - loose cable
+      - hanging wire
+      threshold: 0.28
+reference_run: data/reference
+hard_negative_dir: data/hard-negatives
+edge_filter:
+  radii:
+  - 3
+  - 6
+  - 12
+  span: 18
+  min_contrast: 0.14
+  preserve_trough: 0.065
+  bright_side_only: true
+  protection_radii:
+  - 18
+  - 24
+  - 36
+  min_luminance: 0.3
+fixture_filter:
+  long_edge: 1280
+  padding_pixels: 3
+  detection_prompts:
+    fittings:
+      labels:
+      - pipe elbow
+      - pipe joint
+      - pipe fitting
+      - valve
+      - gas meter
+      - metal clamp
+      - metal bracket
+      threshold: 0.2
+      max_box_area: 0.035
+      max_box_fill: 0.85
+    chain:
+      labels:
+      - metal chain
+      - hanging chain
+      - linked chain
+      threshold: 0.2
+      max_box_area: 0.05
+      max_box_fill: 0.38
+    wire:
+      labels:
+      - hanging wire
+      - red wire
+      - loose cable
+      - black cable
+      - electrical wire
+      threshold: 0.18
+      max_box_area: 0.08
+      max_box_fill: 0.35
+wall_surface:
+  long_edge: 960
+  chroma_radius: 16
+  lightness_margin: 28
+  bridge_radius_px: 24
