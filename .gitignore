@@ -5,7 +5,9 @@ __pycache__/
 .env
 .env.*
 model.env
-/data/
+/.cache/
+/data/*
+!/data/reproduction/
 /results/
 *.joblib
 *.pt

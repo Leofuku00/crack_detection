@@ -140,20 +140,38 @@ def tiled_scores(model, image, target, tile_size, batch_size):
 def run_segmentation(config, model, results_dir, project_root):
     from .inspection_cracks import run_inspection
 
-    if config["random_seed"] != 42 or config["test_size"] != 3 or config["image_size"] is not None:
-        raise ValueError("Expected the native-resolution 6/3 inspection split with seed 42.")
-    dataset = CrackDataset(config["images_dir"], config["masks_dir"], None, model.patch_size)
-    _, val = segmentation_split(dataset)
-    ccss = project_root / config["ccss_train_dir"]
-    train = CrackDataset(ccss / "img", ccss / "lbl", None, model.patch_size,
-                         expected_count=721, jpeg_masks=True)
-    negatives, filenames = select_hard_negatives(project_root / config["hard_negative_dir"], val, model.patch_size)
-    batches = chain(ccss_training_batches(train, config["tile_batch_size"]),
-                    training_tile_batches(negatives, config["tile_size"], config["tile_batch_size"]))
+    evaluation_images = config.get("evaluation_images")
+    expected_count = 9 if evaluation_images is None else len(evaluation_images)
+    dataset = CrackDataset(
+        project_root / config["images_dir"], project_root / config["masks_dir"],
+        config["image_size"], model.patch_size, expected_count=expected_count,
+    )
+    if evaluation_images is None:
+        if config["random_seed"] != 42 or config["test_size"] != 3 or config["image_size"] is not None:
+            raise ValueError("Expected the native-resolution 6/3 inspection split with seed 42.")
+        _, val = segmentation_split(dataset)
+    else:
+        indices = {path.stem: index for index, (path, _) in enumerate(dataset.samples)}
+        if not evaluation_images or len(evaluation_images) != len(indices) or set(evaluation_images) != indices.keys():
+            raise ValueError("evaluation_images must name each evaluation image exactly once.")
+        val = Subset(dataset, [indices[name] for name in evaluation_images])
+
+    training = {}
+    batches = ()
+    if not model.trained_detail_checkpoint:
+        ccss = project_root / config["ccss_train_dir"]
+        train = CrackDataset(ccss / "img", ccss / "lbl", None, model.patch_size,
+                             expected_count=721, jpeg_masks=True)
+        negatives, filenames = select_hard_negatives(
+            project_root / config["hard_negative_dir"], val, model.patch_size
+        )
+        batches = chain(ccss_training_batches(train, config["tile_batch_size"]),
+                        training_tile_batches(negatives, config["tile_size"], config["tile_batch_size"]))
+        training = {"dataset": "CCSS", "split": "train/noAugmentation-noPatch",
+                    "images": len(train) + len(negatives), "hard_negatives": filenames}
     start = perf_counter()
     model.fit_batches(batches)
     elapsed = perf_counter() - start
-    training = {"dataset": "CCSS", "split": "train/noAugmentation-noPatch",
-                "images": len(train) + len(negatives), "hard_negatives": filenames, **model.training_mask_counts}
+    training.update(model.training_mask_counts)
     output = results_dir / "visualizations" / config["model_name"] / f"inspection-cracks-{uuid4().hex[:8]}"
-    return run_inspection(config, model, val, output, training), elapsed, output
+    return run_inspection(config, model, val, output, training, project_root), elapsed, output

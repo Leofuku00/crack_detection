@@ -2,6 +2,7 @@ import argparse
 import csv
 import fcntl
 import json
+import logging
 import sys
 from datetime import UTC, datetime
 from pathlib import Path
@@ -31,7 +32,7 @@ def append_result(path, row):
         writer.writerow(row)
 
 
-def run_experiment(config_path):
+def run_experiment(config_path, *, train=False):
     config_bytes = config_path.read_bytes()
     config = yaml.safe_load(config_bytes)
     if not isinstance(config, dict):
@@ -48,6 +49,13 @@ def run_experiment(config_path):
     params = config.get("params", {})
     if not isinstance(params, dict):
         raise ValueError("The params field must contain a mapping.")
+    if train:
+        if not (starting_checkpoint := config.get("training_start_checkpoint")):
+            raise ValueError("--train requires training_start_checkpoint in the config.")
+        params = {**params, "initial_detail_checkpoint": starting_checkpoint}
+        params.pop("trained_detail_checkpoint", None)
+        config["params"] = params
+        config_bytes = yaml.safe_dump(config, allow_unicode=True, sort_keys=False).encode("utf-8")
     timestamp = datetime.now(UTC)
     run_id = f"{model_name}-{timestamp:%Y%m%dT%H%M%S%fZ}-{uuid4().hex}"
     runs_dir = RESULTS_DIR / "runs"
@@ -84,9 +92,11 @@ def run_experiment(config_path):
 def main():
     parser = argparse.ArgumentParser(description="Train and evaluate a configured model.")
     parser.add_argument("--config", default=PROJECT_ROOT / "configs/dinov3_detail_decoder.yaml", type=Path, help="Path to a YAML config.")
+    parser.add_argument("--train", action="store_true", help="Fine-tune from training_start_checkpoint.")
     args = parser.parse_args()
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
     try:
-        run_experiment(args.config)
+        run_experiment(args.config, train=args.train)
     except (OSError, TypeError, ValueError, yaml.YAMLError) as error:
         parser.error(str(error))
 

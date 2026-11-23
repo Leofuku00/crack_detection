@@ -1,8 +1,6 @@
 """Native-resolution crack inference restricted to the main inspection surface."""
 
 
-from pathlib import Path
-
 import numpy as np
 import torch
 from PIL import Image
@@ -84,7 +82,7 @@ def predict_frames(model, originals, names, config, output, targets=None, region
     return records
 
 
-def run_inspection(config, model, val, output, training):
+def run_inspection(config, model, val, output, training, project_root):
     output.mkdir(parents=True)
     torch.save({"backbone": "dinov3_vitb16", "config": config,
                 "decoder": model.decoder.state_dict()}, output / "decoder.pt")
@@ -98,7 +96,7 @@ def run_inspection(config, model, val, output, training):
         names.append(name)
     regions = None
     if "reference_run" in config:
-        folder = Path(config["reference_run"]) / "region_masks"
+        folder = project_root / config["reference_run"] / "region_masks"
         regions = [read_region(folder / f"{name}.png", image.size)
                    for name, image in zip(names, originals, strict=True)]
     records = predict_frames(model, originals, names, config, output, targets, regions)

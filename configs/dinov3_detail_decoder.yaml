@@ -2,8 +2,13 @@ model_name: dinov3_detail_decoder
 random_seed: 42
 test_size: 3
 image_size: null
-images_dir: data/raw/new_screenshots
-masks_dir: data/processed/masks
+images_dir: data/reproduction/images
+masks_dir: data/reproduction/labels
+evaluation_images:
+- 動画像3-058
+- 動画像1-028
+- 動画像3-049
+training_start_checkpoint: weights/detail.pt
 tile_size: 512
 tile_batch_size: 8
 ccss_train_dir: data/ccss/CCSS-DATA-V4-withVal/benchmarkingDatasets/train/noAugmentation-noPatch
@@ -114,8 +119,8 @@ inspection:
       - loose cable
       - hanging wire
       threshold: 0.28
-reference_run: data/reference
-hard_negative_dir: data/hard-negatives
+reference_run: data/reproduction
+hard_negative_dir: data/reproduction/hard-negatives
 edge_filter:
   radii:
   - 3
